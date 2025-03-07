@@ -64,6 +64,7 @@ class TransitionHandler:
                 self.ffmpeg.ffmpeg_path,
                 "-i", input_file1,
                 "-i", input_file2,
+                "-c:v", "libx264",
                 "-filter_complex", filter_complex,
                 "-y",
                 output_file

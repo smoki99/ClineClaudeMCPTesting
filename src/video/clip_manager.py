@@ -83,16 +83,22 @@ class ClipManager:
              else:
                  logger.warning(f"Skipping clip {clip} due to missing duration metadata")
 
-         # Sort clips by duration (shortest first)
-         clip_metadata.sort(key=lambda x: x['duration'])
+         # Randomize clip order for variety
+         import random
+         random.shuffle(clip_metadata)
 
-         # Select clips to meet target duration
-         for clip in clip_metadata:
-             if current_duration + clip['duration'] <= target_duration:
+         # Keep adding clips until we exceed target duration
+         # Loop through clips multiple times if needed
+         while current_duration < target_duration:
+             for clip in clip_metadata:
                  selected_clips.append(clip['path'])
                  current_duration += clip['duration']
-             else:
-                 break
+                 if current_duration >= target_duration:
+                     break
+             # If we've used all clips but still haven't reached target duration,
+             # shuffle again for next loop
+             if current_duration < target_duration:
+                 random.shuffle(clip_metadata)
 
          logger.info(f"Selected {len(selected_clips)} clips with a total duration of {current_duration} seconds")
          return selected_clips
