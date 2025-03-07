@@ -20,7 +20,6 @@ The FFmpeg wrapper class will provide the following core functionalities:
 *   **Concatenating video clips:** Join multiple video clips into a single video.
 *   **Adding audio to video:** Add an audio track to a video file.
 *   **Applying video filters:** Apply various video filters, such as scaling, cropping, and color correction.
-*   **Extracting audio from video:** Extract the audio track from a video file.
 
 ### API
 
@@ -44,11 +43,11 @@ The FFmpeg wrapper class will expose the following methods:
     *   `output_file`: Path to the output video file.
     *   `filter_name`: Name of the filter to apply (e.g., scale, crop, color balance).
     *   `options`: Dictionary of filter options (e.g., width, height, x, y).
-*   `extract_audio(input_file, output_file, options)`: Extracts the audio track from a video file.
-    *   `input_file`: Path to the input video file.
-    *   `output_file`: Path to the output audio file.
-    *   `options`: Dictionary of extraction options (e.g., format, bitrate).
 
 The `options` parameter in each method will be a dictionary that allows the user to specify various FFmpeg options for each operation.
 
 Error Handling: The wrapper should include robust error handling, raising exceptions with informative messages when FFmpeg commands fail.
+
+### Timeout Handling
+
+The `FFmpegWrapper` class must include timeout checks to prevent long-running processes from looping indefinitely. The timeout value should be configurable via a parameter in the `__init__` method. The `_run_command` method should use the timeout value when running the FFmpeg process and raise a `TimeoutExpired` exception if the process exceeds the specified timeout.

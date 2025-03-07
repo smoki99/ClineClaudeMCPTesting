@@ -57,3 +57,8 @@ def test_apply_filter(ffmpeg_wrapper):
     output_file = str(Config.TEST_DIR / "filtered_video.mp4")
     assert ffmpeg_wrapper.apply_filter(dummy_video_path, output_file, "scale=320:240")
     assert os.path.exists(output_file)
+
+def test_timeout():
+    ffmpeg_wrapper = FFmpegWrapper(timeout=1)
+    with pytest.raises(subprocess.TimeoutExpired):
+        ffmpeg_wrapper.test_timeout_command(1)

@@ -9,13 +9,18 @@ class FFmpegWrapper:
     A wrapper class for FFmpeg functionality.
     """
 
-    def __init__(self, ffmpeg_path=None, ffprobe_path=None):
+    def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
         """
         Initializes the FFmpegWrapper with the paths to the FFmpeg and FFprobe executables.
         If no paths are provided, it uses the paths defined in the Config class.
+        Args:
+            ffmpeg_path (str, optional): Path to the FFmpeg executable. Defaults to None.
+            ffprobe_path (str, optional): Path to the FFprobe executable. Defaults to None.
+            timeout (int, optional): Timeout in seconds for FFmpeg commands. Defaults to None.
         """
         self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
         self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
+        self.timeout = timeout
 
     def _run_command(self, command):
         """
@@ -34,16 +39,19 @@ class FFmpegWrapper:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                check=True  # Raise an exception for non-zero return codes
+                timeout=self.timeout
             )
             logger.info(result.stdout)
+            if result.returncode != 0:
+                logger.error(f"FFmpeg command failed with error: {result.stderr}")
+                return False
             return True
-        except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg command failed with error: {e.stderr}")
-            return False
         except FileNotFoundError:
             logger.error("FFmpeg executable not found. Please ensure FFmpeg is installed and the path is configured correctly.")
             return False
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"FFmpeg command timed out after {self.timeout} seconds.")
+            raise
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
             return False
@@ -148,6 +156,20 @@ class FFmpegWrapper:
             for key, value in options.items():
                 command.extend([f"-{key}", str(value)])
         command.append(output_file)
+        return self._run_command(command)
+
+    def test_timeout_command(self, timeout):
+        """
+        Test timeout with a simple sleep command.
+
+        Args:
+            timeout (int): Timeout in seconds.
+
+        Returns:
+            bool: True if the command was successful, False otherwise.
+        """
+        command = ['python', '-c', 'import time; time.sleep(10)']
+        self.timeout = timeout
         return self._run_command(command)
 
     def extract_audio(self, input_file, output_file, options=None):
