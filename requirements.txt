@@ -1,0 +1,13 @@
+# Core dependencies
+psutil>=5.8.0  # Process and system monitoring
+pillow>=8.0.0  # Image processing
+python-ffmpeg>=1.0.0  # FFmpeg Python bindings
+
+# Testing
+pytest>=6.0.0
+pytest-cov>=2.0.0
+
+# Development tools
+black>=21.0  # Code formatting
+pylint>=2.0.0  # Code linting
+mypy>=0.900  # Type checking

@@ -1,0 +1,70 @@
+# Cline Rules
+
+Last Updated: 2025-03-07
+
+## Purpose
+This file serves as my learning journal and project intelligence repository. It captures important patterns, preferences, and insights that help me work more effectively across sessions.
+
+## Memory Bank Protocol
+### Read Order
+1. projectbrief.md - Foundation and requirements
+2. productContext.md - User experience goals
+3. systemPatterns.md - Technical architecture
+4. techContext.md - Development setup
+5. activeContext.md - Current state
+6. progress.md - Project status
+
+### Update Triggers
+- After discovering new patterns
+- After implementing significant changes
+- When user requests "update memory bank"
+- When context needs clarification
+
+## Project Patterns
+### Documentation Standards
+- All files use Markdown format
+- Include "Last Updated" timestamp
+- Use mermaid for diagrams
+- Keep sections consistent across files
+
+### Implementation Patterns
+- [Document code patterns]
+- [Include style preferences]
+- [Note naming conventions]
+
+### Workflow Preferences
+- [Document user's preferred ways of working]
+- [Include communication preferences]
+- [Note review process]
+
+## Project Intelligence
+### Critical Paths
+- [Document important implementation paths]
+- [Include key dependencies]
+- [Note common pitfalls]
+
+### Known Challenges
+- [Document recurring issues]
+- [Include proven solutions]
+- [Note areas needing caution]
+
+### Evolution History
+- [Document key project decisions]
+- [Include rationale]
+- [Note impact]
+
+## Tool Usage Patterns
+### Development Tools
+- [Document tool preferences]
+- [Include common commands]
+- [Note environment setup]
+
+### Testing Approaches
+- [Document testing patterns]
+- [Include test data handling]
+- [Note coverage expectations]
+
+## Notes
+- This is a living document that grows with project experience
+- Update when discovering new patterns or preferences
+- Use for maintaining consistency across sessions
