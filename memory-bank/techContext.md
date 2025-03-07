@@ -129,6 +129,27 @@ class FFmpegWrapper:
             '-level', '4.1',  # Widely compatible level
             options['output_file']
         ]
+
+    def get_video_dimensions(self, file_path):
+        """Gets the dimensions of a video file using ffprobe"""
+        try:
+            command = [
+                self.ffprobe_path,
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "json",
+                file_path
+            ]
+            
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            import json
+            data = json.loads(result.stdout)
+            return (int(data["streams"][0]["width"]), 
+                   int(data["streams"][0]["height"]))
+        except Exception as e:
+            self.logger.error(f"Error getting video dimensions: {e}")
+            return None
 ```
 
 2. Audio Processing
@@ -210,11 +231,104 @@ class FFmpegError(Exception):
 
 #### Progress Monitoring
 ```python
+class TransitionHandler:
+    """Handles video transitions and effects"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.transition_length = 2.0  # seconds
+        self.resolution = (1920, 1080)  # target resolution
+        
+    def apply_transition(self, clip1, clip2, transition_type='fade'):
+        """Applies transition between two clips"""
+        # Get dimensions for both clips
+        dim1 = self.ffmpeg.get_video_dimensions(clip1)
+        dim2 = self.ffmpeg.get_video_dimensions(clip2)
+        
+        # Scale clips to target resolution
+        scaled1 = self._scale_video(clip1, dim1)
+        scaled2 = self._scale_video(clip2, dim2)
+        
+        # Apply transition effect
+        if transition_type == 'fade':
+            return self._apply_fade_transition(scaled1, scaled2)
+        elif transition_type == 'dissolve':
+            return self._apply_dissolve_transition(scaled1, scaled2)
+        else:
+            return self._apply_cut(scaled1, scaled2)
+            
+    def _scale_video(self, clip, dimensions):
+        """Scales video to target resolution"""
+        if dimensions == self.resolution:
+            return clip
+            
+        options = {
+            'input_file': clip,
+            'output_file': f'temp_{os.path.basename(clip)}',
+            'vf': f'scale={self.resolution[0]}:{self.resolution[1]}'
+        }
+        return self.ffmpeg.build_video_command(options)
+            
+    def _apply_fade_transition(self, clip1, clip2):
+        """Creates a fade transition between clips"""
+        options = {
+            'input_file': clip1,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v]fade=t=out:st={self.transition_length}:d=1[v1];' \
+                            f'[1:v]fade=t=in:st=0:d=1[v2];' \
+                            f'[v1][v2]concat=n=2:v=1:a=0'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+    def _apply_dissolve_transition(self, clip1, clip2):
+        """Creates a dissolve/crossfade transition"""
+        options = {
+            'input_file': clip1,
+            'input_file2': clip2,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v][1:v]xfade=transition=fade:duration={self.transition_length}'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class TextOverlay:
+    """Handles text overlays on video"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.font = "Arial"
+        self.font_size = 24
+        self.color = "white"
+        
+    def add_text(self, video_file, text, position="bottom", duration=None):
+        """Adds text overlay to video"""
+        # Calculate text position
+        if position == "bottom":
+            y_pos = "(h-text_h-20)"
+        elif position == "top":
+            y_pos = "20"
+        else:
+            y_pos = "(h-text_h)/2"
+            
+        # Build drawtext filter
+        drawtext = f"drawtext=text='{text}':fontfile={self.font}:" \
+                  f"fontsize={self.font_size}:fontcolor={self.color}:" \
+                  f"x=(w-text_w)/2:y={y_pos}"
+                  
+        if duration:
+            drawtext += f":enable='between(t,0,{duration})'"
+            
+        options = {
+            'input_file': video_file,
+            'output_file': f'text_{os.path.basename(video_file)}',
+            'vf': drawtext
+        }
+        return self.ffmpeg.build_video_command(options)
+
 class ProgressMonitor:
     """Real-time FFmpeg progress tracking"""
     def __init__(self, total_duration):
         self.total_duration = total_duration
         self.start_time = time.time()
+        self.current_time = 0
+        self.estimated_total = 0
         
     def parse_progress(self, line):
         """Parse FFmpeg output for progress information"""
@@ -222,7 +336,8 @@ class ProgressMonitor:
             'time': r'time=(\d{2}:\d{2}:\d{2})',
             'frame': r'frame=\s*(\d+)',
             'fps': r'fps=\s*(\d+\.?\d*)',
-            'size': r'size=\s*(\d+)kB'
+            'size': r'size=\s*(\d+)kB',
+            'bitrate': r'bitrate=\s*(\d+\.\d+)kbits/s'
         }
         
         result = {}
@@ -234,6 +349,23 @@ class ProgressMonitor:
             self._calculate_eta(result['time'])
         
         return result
+        
+    def _calculate_eta(self, time_str):
+        """Calculate estimated time remaining"""
+        h, m, s = map(int, time_str.split(':'))
+        self.current_time = h * 3600 + m * 60 + s
+        
+        if self.current_time > 0:
+            elapsed = time.time() - self.start_time
+            self.estimated_total = (elapsed * self.total_duration) / self.current_time
+            
+        return self.estimated_total - elapsed if 'elapsed' in locals() else None
+
+    def get_progress(self):
+        """Get current progress as percentage"""
+        if self.total_duration > 0:
+            return (self.current_time / self.total_duration) * 100
+        return 0
 ```
 
 ## Configuration
