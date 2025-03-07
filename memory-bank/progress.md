@@ -43,12 +43,14 @@ This document tracks what works, what's left to build, current status, and known
 
 ## In Progress
 ### Video Processing System
-- Core implementation (70%)
+- Core implementation (90%)
   - Directory structure created
-  - FFmpeg wrapper implemented
-  - Video transition system working
-  - Resolution handling implemented
-  - Pending text overlay system
+  - FFmpeg wrapper fully implemented
+  - Video transition system implemented with multiple effects
+  - Resolution handling and scaling working
+  - Text overlay system implemented
+  - Progress monitoring with ETA calculation
+  - Performance optimizations in place
   
 ### Documentation
 - Video processing design (0%)

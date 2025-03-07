@@ -120,43 +120,18 @@ classDiagram
 
 #### Implementation Strategy
 ```python
-import subprocess
-import logging
-import os
-from src.config import Config
-
-logger = logging.getLogger(__name__)
-
 class FFmpegWrapper:
-    """
-    A wrapper class for FFmpeg functionality.
-    """
-
+    """Central FFmpeg operations manager"""
     def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
-        """
-        Initializes the FFmpegWrapper with the paths to the FFmpeg and FFprobe executables.
-        If no paths are provided, it uses the paths defined in the Config class.
-        Args:
-            ffmpeg_path (str, optional): Path to the FFmpeg executable. Defaults to None.
-            ffprobe_path (str, optional): Path to the FFprobe executable. Defaults to None.
-            timeout (int, optional): Timeout in seconds for FFmpeg commands. Defaults to None.
-        """
         self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
         self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
         self.timeout = timeout
+        self.logger = logging.getLogger('FFmpegWrapper')
 
     def _run_command(self, command):
-        """
-        Runs an FFmpeg command using subprocess.
-
-        Args:
-            command (list): A list of strings representing the FFmpeg command.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
+        """Runs an FFmpeg command using subprocess"""
         try:
-            logger.info(f"Running command: {' '.join(command)}")
+            self.logger.info(f"Running command: {' '.join(command)}")
             result = subprocess.run(
                 command,
                 stdout=subprocess.PIPE,
@@ -164,173 +139,49 @@ class FFmpegWrapper:
                 text=True,
                 timeout=self.timeout
             )
-            logger.info(result.stdout)
+            self.logger.info(result.stdout)
             if result.returncode != 0:
-                logger.error(f"FFmpeg command failed with error: {result.stderr}")
+                self.logger.error(f"FFmpeg command failed with error: {result.stderr}")
                 return None
             return result
         except FileNotFoundError:
-            logger.error("FFmpeg executable not found. Please ensure FFmpeg is installed and the path is configured correctly.")
+            self.logger.error("FFmpeg executable not found")
             return None
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"FFmpeg command timed out after {self.timeout} seconds.")
-            raise
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"FFmpeg command timed out after {self.timeout} seconds")
+            return None
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+            self.logger.error(f"An unexpected error occurred: {e}")
             return None
 
-    def encode_video(self, input_file, output_file, options=None):
-        """
-        Encodes a video file.
+    def build_audio_command(self, options):
+        """Optimized audio processing command"""
+        return [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', options['input_list'],
+            '-c', 'copy',  # Stream copy for efficiency
+            options['output_file']
+        ]
 
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of encoding options. Defaults to None.
-
-        Returns:
-            bool: True if the encoding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path]  # -y to overwrite output file
-        
-        # If input_file is a raw FFmpeg input (like "testsrc=duration=1..."), don't use -i
-        if not os.path.exists(input_file):
-            command.extend(["-f", "lavfi", "-i", input_file])
-        else:
-            command.extend(['-i', input_file])
-            
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.extend(['-y', output_file]) # -y to overwrite output file
-        return self._run_command(command)
-
-    def concat_video(self, input_files, output_file, options=None):
-        """
-        Concatenates multiple video clips.
-
-        Args:
-            input_files (list): List of paths to the input video files.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of concatenation options. Defaults to None.
-
-        Returns:
-            bool: True if the concatenation was successful, False otherwise.
-        """
-        # Create a temporary concat file
-        concat_file = "concat.txt"
-        try:
-            with open(concat_file, "w") as f:
-                for file in input_files:
-                    f.write(f"file '{file}'\n")
-
-            command = [
-                self.ffmpeg_path,
-                "-f",
-                "concat",
-                "-safe",
-                "0",  # Required for relative paths
-                "-i",
-                concat_file,
-                "-c",
-                "copy",  # Copy streams directly
-                "-y", # Overwrite output file if it exists
-                output_file,
-            ]
-            if options:
-                for key, value in options.items():
-                    command.extend([f"-{key}", str(value)])
-            success = self._run_command(command)
-        finally:
-            # Clean up the temporary concat file
-            import os
-            if os.path.exists(concat_file):
-                os.remove(concat_file)
-        return success
-
-    def add_audio(self, input_file, audio_file, output_file, options=None):
-        """
-        Adds an audio track to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            audio_file (str): Path to the audio file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of audio adding options. Defaults to None.
-
-        Returns:
-            bool: True if the audio adding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-i', audio_file, '-c', 'copy', '-map', '0:v', '-map', '1:a', '-shortest', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def apply_filter(self, input_file, output_file, filter_name, options=None):
-        """
-        Applies a video filter to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            filter_name (str): Name of the filter to apply.
-            options (dict, optional): Dictionary of filter options. Defaults to None.
-
-        Returns:
-            bool: True if the filter application was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vf', filter_name, '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def test_timeout_command(self, timeout):
-        """
-        Test timeout with a simple sleep command.
-
-        Args:
-            timeout (int): Timeout in seconds.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
-        command = ['python', '-c', 'import time; time.sleep(10)']
-        self.timeout = timeout
-        return self._run_command(command)
-
-    def extract_audio(self, input_file, output_file, options=None):
-        """
-        Extracts the audio track from a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output audio file.
-            options (dict, optional): Dictionary of extraction options. Defaults to None.
-
-        Returns:
-            bool: True if the audio extraction was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-f', 'wav', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
+    def build_video_command(self, options):
+        """H.264 optimized video processing"""
+        return [
+            'ffmpeg',
+            '-i', options['input_file'],
+            '-c:v', 'libx264',
+            '-preset', options.get('preset', 'medium'),  # Balanced preset
+            '-crf', '23',  # High quality, reasonable size
+            '-tune', 'film',  # Optimized for video content
+            '-movflags', '+faststart',  # Web playback optimization
+            '-profile:v', 'high',  # High profile for better quality
+            '-level', '4.1',  # Widely compatible level
+            options['output_file']
+        ]
 
     def get_video_dimensions(self, file_path):
-        """
-        Gets the dimensions of a video file using ffprobe.
-
-        Args:
-            file_path (str): Path to the video file.
-
-        Returns:
-            tuple: A tuple containing (width, height) of the video, or None if an error occurs.
-        """
+        """Gets the dimensions of a video file using ffprobe"""
         try:
             command = [
                 self.ffprobe_path,
@@ -344,12 +195,147 @@ class FFmpegWrapper:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
             import json
             data = json.loads(result.stdout)
-            width = int(data["streams"][0]["width"])
-            height = int(data["streams"][0]["height"])
-            return width, height
+            return (int(data["streams"][0]["width"]), 
+                   int(data["streams"][0]["height"]))
         except Exception as e:
-            logger.error(f"Error getting video dimensions: {e}")
+            self.logger.error(f"Error getting video dimensions: {e}")
             return None
+
+class TransitionHandler:
+    """Handles video transitions and effects"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.transition_length = 2.0  # seconds
+        self.resolution = (1920, 1080)  # target resolution
+        
+    def apply_transition(self, clip1, clip2, transition_type='fade'):
+        """Applies transition between two clips"""
+        # Get dimensions for both clips
+        dim1 = self.ffmpeg.get_video_dimensions(clip1)
+        dim2 = self.ffmpeg.get_video_dimensions(clip2)
+        
+        # Scale clips to target resolution
+        scaled1 = self._scale_video(clip1, dim1)
+        scaled2 = self._scale_video(clip2, dim2)
+        
+        # Apply transition effect
+        if transition_type == 'fade':
+            return self._apply_fade_transition(scaled1, scaled2)
+        elif transition_type == 'dissolve':
+            return self._apply_dissolve_transition(scaled1, scaled2)
+        else:
+            return self._apply_cut(scaled1, scaled2)
+            
+    def _scale_video(self, clip, dimensions):
+        """Scales video to target resolution"""
+        if dimensions == self.resolution:
+            return clip
+            
+        options = {
+            'input_file': clip,
+            'output_file': f'temp_{os.path.basename(clip)}',
+            'vf': f'scale={self.resolution[0]}:{self.resolution[1]}'
+        }
+        return self.ffmpeg.build_video_command(options)
+            
+    def _apply_fade_transition(self, clip1, clip2):
+        """Creates a fade transition between clips"""
+        options = {
+            'input_file': clip1,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v]fade=t=out:st={self.transition_length}:d=1[v1];' \
+                            f'[1:v]fade=t=in:st=0:d=1[v2];' \
+                            f'[v1][v2]concat=n=2:v=1:a=0'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+    def _apply_dissolve_transition(self, clip1, clip2):
+        """Creates a dissolve/crossfade transition"""
+        options = {
+            'input_file': clip1,
+            'input_file2': clip2,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v][1:v]xfade=transition=fade:duration={self.transition_length}'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class TextOverlay:
+    """Handles text overlays on video"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.font = "Arial"
+        self.font_size = 24
+        self.color = "white"
+        
+    def add_text(self, video_file, text, position="bottom", duration=None):
+        """Adds text overlay to video"""
+        # Calculate text position
+        if position == "bottom":
+            y_pos = "(h-text_h-20)"
+        elif position == "top":
+            y_pos = "20"
+        else:
+            y_pos = "(h-text_h)/2"
+            
+        # Build drawtext filter
+        drawtext = f"drawtext=text='{text}':fontfile={self.font}:" \
+                  f"fontsize={self.font_size}:fontcolor={self.color}:" \
+                  f"x=(w-text_w)/2:y={y_pos}"
+                  
+        if duration:
+            drawtext += f":enable='between(t,0,{duration})'"
+            
+        options = {
+            'input_file': video_file,
+            'output_file': f'text_{os.path.basename(video_file)}',
+            'vf': drawtext
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class ProgressMonitor:
+    """Real-time FFmpeg progress tracking"""
+    def __init__(self, total_duration):
+        self.total_duration = total_duration
+        self.start_time = time.time()
+        self.current_time = 0
+        self.estimated_total = 0
+        
+    def parse_progress(self, line):
+        """Parse FFmpeg output for progress information"""
+        patterns = {
+            'time': r'time=(\d{2}:\d{2}:\d{2})',
+            'frame': r'frame=\s*(\d+)',
+            'fps': r'fps=\s*(\d+\.?\d*)',
+            'size': r'size=\s*(\d+)kB',
+            'bitrate': r'bitrate=\s*(\d+\.\d+)kbits/s'
+        }
+        
+        result = {}
+        for key, pattern in patterns.items():
+            if match := re.search(pattern, line):
+                result[key] = match.group(1)
+                
+        if 'time' in result:
+            self._calculate_eta(result['time'])
+        
+        return result
+        
+    def _calculate_eta(self, time_str):
+        """Calculate estimated time remaining"""
+        h, m, s = map(int, time_str.split(':'))
+        self.current_time = h * 3600 + m * 60 + s
+        
+        if self.current_time > 0:
+            elapsed = time.time() - self.start_time
+            self.estimated_total = (elapsed * self.total_duration) / self.current_time
+            
+        return self.estimated_total - elapsed if 'elapsed' in locals() else None
+
+    def get_progress(self):
+        """Get current progress as percentage"""
+        if self.total_duration > 0:
+            return (self.current_time / self.total_duration) * 100
+        return 0
 ```
 # System Patterns
 
@@ -473,43 +459,18 @@ classDiagram
 
 #### Implementation Strategy
 ```python
-import subprocess
-import logging
-import os
-from src.config import Config
-
-logger = logging.getLogger(__name__)
-
 class FFmpegWrapper:
-    """
-    A wrapper class for FFmpeg functionality.
-    """
-
+    """Central FFmpeg operations manager"""
     def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
-        """
-        Initializes the FFmpegWrapper with the paths to the FFmpeg and FFprobe executables.
-        If no paths are provided, it uses the paths defined in the Config class.
-        Args:
-            ffmpeg_path (str, optional): Path to the FFmpeg executable. Defaults to None.
-            ffprobe_path (str, optional): Path to the FFprobe executable. Defaults to None.
-            timeout (int, optional): Timeout in seconds for FFmpeg commands. Defaults to None.
-        """
         self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
         self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
         self.timeout = timeout
+        self.logger = logging.getLogger('FFmpegWrapper')
 
     def _run_command(self, command):
-        """
-        Runs an FFmpeg command using subprocess.
-
-        Args:
-            command (list): A list of strings representing the FFmpeg command.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
+        """Runs an FFmpeg command using subprocess"""
         try:
-            logger.info(f"Running command: {' '.join(command)}")
+            self.logger.info(f"Running command: {' '.join(command)}")
             result = subprocess.run(
                 command,
                 stdout=subprocess.PIPE,
@@ -517,173 +478,49 @@ class FFmpegWrapper:
                 text=True,
                 timeout=self.timeout
             )
-            logger.info(result.stdout)
+            self.logger.info(result.stdout)
             if result.returncode != 0:
-                logger.error(f"FFmpeg command failed with error: {result.stderr}")
+                self.logger.error(f"FFmpeg command failed with error: {result.stderr}")
                 return None
             return result
         except FileNotFoundError:
-            logger.error("FFmpeg executable not found. Please ensure FFmpeg is installed and the path is configured correctly.")
+            self.logger.error("FFmpeg executable not found")
             return None
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"FFmpeg command timed out after {self.timeout} seconds.")
-            raise
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"FFmpeg command timed out after {self.timeout} seconds")
+            return None
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+            self.logger.error(f"An unexpected error occurred: {e}")
             return None
 
-    def encode_video(self, input_file, output_file, options=None):
-        """
-        Encodes a video file.
+    def build_audio_command(self, options):
+        """Optimized audio processing command"""
+        return [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', options['input_list'],
+            '-c', 'copy',  # Stream copy for efficiency
+            options['output_file']
+        ]
 
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of encoding options. Defaults to None.
-
-        Returns:
-            bool: True if the encoding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path]  # -y to overwrite output file
-        
-        # If input_file is a raw FFmpeg input (like "testsrc=duration=1..."), don't use -i
-        if not os.path.exists(input_file):
-            command.extend(["-f", "lavfi", "-i", input_file])
-        else:
-            command.extend(['-i', input_file])
-            
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.extend(['-y', output_file]) # -y to overwrite output file
-        return self._run_command(command)
-
-    def concat_video(self, input_files, output_file, options=None):
-        """
-        Concatenates multiple video clips.
-
-        Args:
-            input_files (list): List of paths to the input video files.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of concatenation options. Defaults to None.
-
-        Returns:
-            bool: True if the concatenation was successful, False otherwise.
-        """
-        # Create a temporary concat file
-        concat_file = "concat.txt"
-        try:
-            with open(concat_file, "w") as f:
-                for file in input_files:
-                    f.write(f"file '{file}'\n")
-
-            command = [
-                self.ffmpeg_path,
-                "-f",
-                "concat",
-                "-safe",
-                "0",  # Required for relative paths
-                "-i",
-                concat_file,
-                "-c",
-                "copy",  # Copy streams directly
-                "-y", # Overwrite output file if it exists
-                output_file,
-            ]
-            if options:
-                for key, value in options.items():
-                    command.extend([f"-{key}", str(value)])
-            success = self._run_command(command)
-        finally:
-            # Clean up the temporary concat file
-            import os
-            if os.path.exists(concat_file):
-                os.remove(concat_file)
-        return success
-
-    def add_audio(self, input_file, audio_file, output_file, options=None):
-        """
-        Adds an audio track to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            audio_file (str): Path to the audio file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of audio adding options. Defaults to None.
-
-        Returns:
-            bool: True if the audio adding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-i', audio_file, '-c', 'copy', '-map', '0:v', '-map', '1:a', '-shortest', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def apply_filter(self, input_file, output_file, filter_name, options=None):
-        """
-        Applies a video filter to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            filter_name (str): Name of the filter to apply.
-            options (dict, optional): Dictionary of filter options. Defaults to None.
-
-        Returns:
-            bool: True if the filter application was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vf', filter_name, '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def test_timeout_command(self, timeout):
-        """
-        Test timeout with a simple sleep command.
-
-        Args:
-            timeout (int): Timeout in seconds.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
-        command = ['python', '-c', 'import time; time.sleep(10)']
-        self.timeout = timeout
-        return self._run_command(command)
-
-    def extract_audio(self, input_file, output_file, options=None):
-        """
-        Extracts the audio track from a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output audio file.
-            options (dict, optional): Dictionary of extraction options. Defaults to None.
-
-        Returns:
-            bool: True if the audio extraction was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-f', 'wav', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
+    def build_video_command(self, options):
+        """H.264 optimized video processing"""
+        return [
+            'ffmpeg',
+            '-i', options['input_file'],
+            '-c:v', 'libx264',
+            '-preset', options.get('preset', 'medium'),  # Balanced preset
+            '-crf', '23',  # High quality, reasonable size
+            '-tune', 'film',  # Optimized for video content
+            '-movflags', '+faststart',  # Web playback optimization
+            '-profile:v', 'high',  # High profile for better quality
+            '-level', '4.1',  # Widely compatible level
+            options['output_file']
+        ]
 
     def get_video_dimensions(self, file_path):
-        """
-        Gets the dimensions of a video file using ffprobe.
-
-        Args:
-            file_path (str): Path to the video file.
-
-        Returns:
-            tuple: A tuple containing (width, height) of the video, or None if an error occurs.
-        """
+        """Gets the dimensions of a video file using ffprobe"""
         try:
             command = [
                 self.ffprobe_path,
@@ -697,12 +534,147 @@ class FFmpegWrapper:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
             import json
             data = json.loads(result.stdout)
-            width = int(data["streams"][0]["width"])
-            height = int(data["streams"][0]["height"])
-            return width, height
+            return (int(data["streams"][0]["width"]), 
+                   int(data["streams"][0]["height"]))
         except Exception as e:
-            logger.error(f"Error getting video dimensions: {e}")
+            self.logger.error(f"Error getting video dimensions: {e}")
             return None
+
+class TransitionHandler:
+    """Handles video transitions and effects"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.transition_length = 2.0  # seconds
+        self.resolution = (1920, 1080)  # target resolution
+        
+    def apply_transition(self, clip1, clip2, transition_type='fade'):
+        """Applies transition between two clips"""
+        # Get dimensions for both clips
+        dim1 = self.ffmpeg.get_video_dimensions(clip1)
+        dim2 = self.ffmpeg.get_video_dimensions(clip2)
+        
+        # Scale clips to target resolution
+        scaled1 = self._scale_video(clip1, dim1)
+        scaled2 = self._scale_video(clip2, dim2)
+        
+        # Apply transition effect
+        if transition_type == 'fade':
+            return self._apply_fade_transition(scaled1, scaled2)
+        elif transition_type == 'dissolve':
+            return self._apply_dissolve_transition(scaled1, scaled2)
+        else:
+            return self._apply_cut(scaled1, scaled2)
+            
+    def _scale_video(self, clip, dimensions):
+        """Scales video to target resolution"""
+        if dimensions == self.resolution:
+            return clip
+            
+        options = {
+            'input_file': clip,
+            'output_file': f'temp_{os.path.basename(clip)}',
+            'vf': f'scale={self.resolution[0]}:{self.resolution[1]}'
+        }
+        return self.ffmpeg.build_video_command(options)
+            
+    def _apply_fade_transition(self, clip1, clip2):
+        """Creates a fade transition between clips"""
+        options = {
+            'input_file': clip1,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v]fade=t=out:st={self.transition_length}:d=1[v1];' \
+                            f'[1:v]fade=t=in:st=0:d=1[v2];' \
+                            f'[v1][v2]concat=n=2:v=1:a=0'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+    def _apply_dissolve_transition(self, clip1, clip2):
+        """Creates a dissolve/crossfade transition"""
+        options = {
+            'input_file': clip1,
+            'input_file2': clip2,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v][1:v]xfade=transition=fade:duration={self.transition_length}'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class TextOverlay:
+    """Handles text overlays on video"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.font = "Arial"
+        self.font_size = 24
+        self.color = "white"
+        
+    def add_text(self, video_file, text, position="bottom", duration=None):
+        """Adds text overlay to video"""
+        # Calculate text position
+        if position == "bottom":
+            y_pos = "(h-text_h-20)"
+        elif position == "top":
+            y_pos = "20"
+        else:
+            y_pos = "(h-text_h)/2"
+            
+        # Build drawtext filter
+        drawtext = f"drawtext=text='{text}':fontfile={self.font}:" \
+                  f"fontsize={self.font_size}:fontcolor={self.color}:" \
+                  f"x=(w-text_w)/2:y={y_pos}"
+                  
+        if duration:
+            drawtext += f":enable='between(t,0,{duration})'"
+            
+        options = {
+            'input_file': video_file,
+            'output_file': f'text_{os.path.basename(video_file)}',
+            'vf': drawtext
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class ProgressMonitor:
+    """Real-time FFmpeg progress tracking"""
+    def __init__(self, total_duration):
+        self.total_duration = total_duration
+        self.start_time = time.time()
+        self.current_time = 0
+        self.estimated_total = 0
+        
+    def parse_progress(self, line):
+        """Parse FFmpeg output for progress information"""
+        patterns = {
+            'time': r'time=(\d{2}:\d{2}:\d{2})',
+            'frame': r'frame=\s*(\d+)',
+            'fps': r'fps=\s*(\d+\.?\d*)',
+            'size': r'size=\s*(\d+)kB',
+            'bitrate': r'bitrate=\s*(\d+\.\d+)kbits/s'
+        }
+        
+        result = {}
+        for key, pattern in patterns.items():
+            if match := re.search(pattern, line):
+                result[key] = match.group(1)
+                
+        if 'time' in result:
+            self._calculate_eta(result['time'])
+        
+        return result
+        
+    def _calculate_eta(self, time_str):
+        """Calculate estimated time remaining"""
+        h, m, s = map(int, time_str.split(':'))
+        self.current_time = h * 3600 + m * 60 + s
+        
+        if self.current_time > 0:
+            elapsed = time.time() - self.start_time
+            self.estimated_total = (elapsed * self.total_duration) / self.current_time
+            
+        return self.estimated_total - elapsed if 'elapsed' in locals() else None
+
+    def get_progress(self):
+        """Get current progress as percentage"""
+        if self.total_duration > 0:
+            return (self.current_time / self.total_duration) * 100
+        return 0
 ```
 
 #### Separation of Concerns
@@ -943,43 +915,18 @@ classDiagram
 
 #### Implementation Strategy
 ```python
-import subprocess
-import logging
-import os
-from src.config import Config
-
-logger = logging.getLogger(__name__)
-
 class FFmpegWrapper:
-    """
-    A wrapper class for FFmpeg functionality.
-    """
-
+    """Central FFmpeg operations manager"""
     def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
-        """
-        Initializes the FFmpegWrapper with the paths to the FFmpeg and FFprobe executables.
-        If no paths are provided, it uses the paths defined in the Config class.
-        Args:
-            ffmpeg_path (str, optional): Path to the FFmpeg executable. Defaults to None.
-            ffprobe_path (str, optional): Path to the FFprobe executable. Defaults to None.
-            timeout (int, optional): Timeout in seconds for FFmpeg commands. Defaults to None.
-        """
         self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
         self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
         self.timeout = timeout
+        self.logger = logging.getLogger('FFmpegWrapper')
 
     def _run_command(self, command):
-        """
-        Runs an FFmpeg command using subprocess.
-
-        Args:
-            command (list): A list of strings representing the FFmpeg command.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
+        """Runs an FFmpeg command using subprocess"""
         try:
-            logger.info(f"Running command: {' '.join(command)}")
+            self.logger.info(f"Running command: {' '.join(command)}")
             result = subprocess.run(
                 command,
                 stdout=subprocess.PIPE,
@@ -987,173 +934,49 @@ class FFmpegWrapper:
                 text=True,
                 timeout=self.timeout
             )
-            logger.info(result.stdout)
+            self.logger.info(result.stdout)
             if result.returncode != 0:
-                logger.error(f"FFmpeg command failed with error: {result.stderr}")
+                self.logger.error(f"FFmpeg command failed with error: {result.stderr}")
                 return None
             return result
         except FileNotFoundError:
-            logger.error("FFmpeg executable not found. Please ensure FFmpeg is installed and the path is configured correctly.")
+            self.logger.error("FFmpeg executable not found")
             return None
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"FFmpeg command timed out after {self.timeout} seconds.")
-            raise
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"FFmpeg command timed out after {self.timeout} seconds")
+            return None
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
+            self.logger.error(f"An unexpected error occurred: {e}")
             return None
 
-    def encode_video(self, input_file, output_file, options=None):
-        """
-        Encodes a video file.
+    def build_audio_command(self, options):
+        """Optimized audio processing command"""
+        return [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', options['input_list'],
+            '-c', 'copy',  # Stream copy for efficiency
+            options['output_file']
+        ]
 
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of encoding options. Defaults to None.
-
-        Returns:
-            bool: True if the encoding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path]  # -y to overwrite output file
-        
-        # If input_file is a raw FFmpeg input (like "testsrc=duration=1..."), don't use -i
-        if not os.path.exists(input_file):
-            command.extend(["-f", "lavfi", "-i", input_file])
-        else:
-            command.extend(['-i', input_file])
-            
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.extend(['-y', output_file]) # -y to overwrite output file
-        return self._run_command(command)
-
-    def concat_video(self, input_files, output_file, options=None):
-        """
-        Concatenates multiple video clips.
-
-        Args:
-            input_files (list): List of paths to the input video files.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of concatenation options. Defaults to None.
-
-        Returns:
-            bool: True if the concatenation was successful, False otherwise.
-        """
-        # Create a temporary concat file
-        concat_file = "concat.txt"
-        try:
-            with open(concat_file, "w") as f:
-                for file in input_files:
-                    f.write(f"file '{file}'\n")
-
-            command = [
-                self.ffmpeg_path,
-                "-f",
-                "concat",
-                "-safe",
-                "0",  # Required for relative paths
-                "-i",
-                concat_file,
-                "-c",
-                "copy",  # Copy streams directly
-                "-y", # Overwrite output file if it exists
-                output_file,
-            ]
-            if options:
-                for key, value in options.items():
-                    command.extend([f"-{key}", str(value)])
-            success = self._run_command(command)
-        finally:
-            # Clean up the temporary concat file
-            import os
-            if os.path.exists(concat_file):
-                os.remove(concat_file)
-        return success
-
-    def add_audio(self, input_file, audio_file, output_file, options=None):
-        """
-        Adds an audio track to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            audio_file (str): Path to the audio file.
-            output_file (str): Path to the output video file.
-            options (dict, optional): Dictionary of audio adding options. Defaults to None.
-
-        Returns:
-            bool: True if the audio adding was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-i', audio_file, '-c', 'copy', '-map', '0:v', '-map', '1:a', '-shortest', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def apply_filter(self, input_file, output_file, filter_name, options=None):
-        """
-        Applies a video filter to a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output video file.
-            filter_name (str): Name of the filter to apply.
-            options (dict, optional): Dictionary of filter options. Defaults to None.
-
-        Returns:
-            bool: True if the filter application was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vf', filter_name, '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
-
-    def test_timeout_command(self, timeout):
-        """
-        Test timeout with a simple sleep command.
-
-        Args:
-            timeout (int): Timeout in seconds.
-
-        Returns:
-            bool: True if the command was successful, False otherwise.
-        """
-        command = ['python', '-c', 'import time; time.sleep(10)']
-        self.timeout = timeout
-        return self._run_command(command)
-
-    def extract_audio(self, input_file, output_file, options=None):
-        """
-        Extracts the audio track from a video file.
-
-        Args:
-            input_file (str): Path to the input video file.
-            output_file (str): Path to the output audio file.
-            options (dict, optional): Dictionary of extraction options. Defaults to None.
-
-        Returns:
-            bool: True if the audio extraction was successful, False otherwise.
-        """
-        command = [self.ffmpeg_path, '-i', input_file, '-vn', '-acodec', 'pcm_s16le', '-f', 'wav', '-y']
-        if options:
-            for key, value in options.items():
-                command.extend([f"-{key}", str(value)])
-        command.append(output_file)
-        return self._run_command(command)
+    def build_video_command(self, options):
+        """H.264 optimized video processing"""
+        return [
+            'ffmpeg',
+            '-i', options['input_file'],
+            '-c:v', 'libx264',
+            '-preset', options.get('preset', 'medium'),  # Balanced preset
+            '-crf', '23',  # High quality, reasonable size
+            '-tune', 'film',  # Optimized for video content
+            '-movflags', '+faststart',  # Web playback optimization
+            '-profile:v', 'high',  # High profile for better quality
+            '-level', '4.1',  # Widely compatible level
+            options['output_file']
+        ]
 
     def get_video_dimensions(self, file_path):
-        """
-        Gets the dimensions of a video file using ffprobe.
-
-        Args:
-            file_path (str): Path to the video file.
-
-        Returns:
-            tuple: A tuple containing (width, height) of the video, or None if an error occurs.
-        """
+        """Gets the dimensions of a video file using ffprobe"""
         try:
             command = [
                 self.ffprobe_path,
@@ -1167,12 +990,147 @@ class FFmpegWrapper:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
             import json
             data = json.loads(result.stdout)
-            width = int(data["streams"][0]["width"])
-            height = int(data["streams"][0]["height"])
-            return width, height
+            return (int(data["streams"][0]["width"]), 
+                   int(data["streams"][0]["height"]))
         except Exception as e:
-            logger.error(f"Error getting video dimensions: {e}")
+            self.logger.error(f"Error getting video dimensions: {e}")
             return None
+
+class TransitionHandler:
+    """Handles video transitions and effects"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.transition_length = 2.0  # seconds
+        self.resolution = (1920, 1080)  # target resolution
+        
+    def apply_transition(self, clip1, clip2, transition_type='fade'):
+        """Applies transition between two clips"""
+        # Get dimensions for both clips
+        dim1 = self.ffmpeg.get_video_dimensions(clip1)
+        dim2 = self.ffmpeg.get_video_dimensions(clip2)
+        
+        # Scale clips to target resolution
+        scaled1 = self._scale_video(clip1, dim1)
+        scaled2 = self._scale_video(clip2, dim2)
+        
+        # Apply transition effect
+        if transition_type == 'fade':
+            return self._apply_fade_transition(scaled1, scaled2)
+        elif transition_type == 'dissolve':
+            return self._apply_dissolve_transition(scaled1, scaled2)
+        else:
+            return self._apply_cut(scaled1, scaled2)
+            
+    def _scale_video(self, clip, dimensions):
+        """Scales video to target resolution"""
+        if dimensions == self.resolution:
+            return clip
+            
+        options = {
+            'input_file': clip,
+            'output_file': f'temp_{os.path.basename(clip)}',
+            'vf': f'scale={self.resolution[0]}:{self.resolution[1]}'
+        }
+        return self.ffmpeg.build_video_command(options)
+            
+    def _apply_fade_transition(self, clip1, clip2):
+        """Creates a fade transition between clips"""
+        options = {
+            'input_file': clip1,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v]fade=t=out:st={self.transition_length}:d=1[v1];' \
+                            f'[1:v]fade=t=in:st=0:d=1[v2];' \
+                            f'[v1][v2]concat=n=2:v=1:a=0'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+    def _apply_dissolve_transition(self, clip1, clip2):
+        """Creates a dissolve/crossfade transition"""
+        options = {
+            'input_file': clip1,
+            'input_file2': clip2,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v][1:v]xfade=transition=fade:duration={self.transition_length}'
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class TextOverlay:
+    """Handles text overlays on video"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.font = "Arial"
+        self.font_size = 24
+        self.color = "white"
+        
+    def add_text(self, video_file, text, position="bottom", duration=None):
+        """Adds text overlay to video"""
+        # Calculate text position
+        if position == "bottom":
+            y_pos = "(h-text_h-20)"
+        elif position == "top":
+            y_pos = "20"
+        else:
+            y_pos = "(h-text_h)/2"
+            
+        # Build drawtext filter
+        drawtext = f"drawtext=text='{text}':fontfile={self.font}:" \
+                  f"fontsize={self.font_size}:fontcolor={self.color}:" \
+                  f"x=(w-text_w)/2:y={y_pos}"
+                  
+        if duration:
+            drawtext += f":enable='between(t,0,{duration})'"
+            
+        options = {
+            'input_file': video_file,
+            'output_file': f'text_{os.path.basename(video_file)}',
+            'vf': drawtext
+        }
+        return self.ffmpeg.build_video_command(options)
+
+class ProgressMonitor:
+    """Real-time FFmpeg progress tracking"""
+    def __init__(self, total_duration):
+        self.total_duration = total_duration
+        self.start_time = time.time()
+        self.current_time = 0
+        self.estimated_total = 0
+        
+    def parse_progress(self, line):
+        """Parse FFmpeg output for progress information"""
+        patterns = {
+            'time': r'time=(\d{2}:\d{2}:\d{2})',
+            'frame': r'frame=\s*(\d+)',
+            'fps': r'fps=\s*(\d+\.?\d*)',
+            'size': r'size=\s*(\d+)kB',
+            'bitrate': r'bitrate=\s*(\d+\.\d+)kbits/s'
+        }
+        
+        result = {}
+        for key, pattern in patterns.items():
+            if match := re.search(pattern, line):
+                result[key] = match.group(1)
+                
+        if 'time' in result:
+            self._calculate_eta(result['time'])
+        
+        return result
+        
+    def _calculate_eta(self, time_str):
+        """Calculate estimated time remaining"""
+        h, m, s = map(int, time_str.split(':'))
+        self.current_time = h * 3600 + m * 60 + s
+        
+        if self.current_time > 0:
+            elapsed = time.time() - self.start_time
+            self.estimated_total = (elapsed * self.total_duration) / self.current_time
+            
+        return self.estimated_total - elapsed if 'elapsed' in locals() else None
+
+    def get_progress(self):
+        """Get current progress as percentage"""
+        if self.total_duration > 0:
+            return (self.current_time / self.total_duration) * 100
+        return 0
 ```
 # System Patterns
 
@@ -1298,29 +1256,56 @@ classDiagram
 ```python
 class FFmpegWrapper:
     """Central FFmpeg operations manager"""
-    def __init__(self, timeout=None):
-        self.process = None
+    def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
+        self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
+        self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
         self.timeout = timeout
-        self.gpu_enabled = self._check_gpu_support()
+        self.logger = logging.getLogger('FFmpegWrapper')
+
+    def _run_command(self, command):
+        """Runs an FFmpeg command using subprocess"""
+        try:
+            self.logger.info(f"Running command: {' '.join(command)}")
+            result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=self.timeout
+            )
+            self.logger.info(result.stdout)
+            if result.returncode != 0:
+                self.logger.error(f"FFmpeg command failed with error: {result.stderr}")
+                return None
+            return result
+        except FileNotFoundError:
+            self.logger.error("FFmpeg executable not found")
+            return None
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"FFmpeg command timed out after {self.timeout} seconds")
+            return None
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred: {e}")
+            return None
 
     def build_audio_command(self, options):
-        """Constructs FFmpeg command for audio processing"""
+        """Optimized audio processing command"""
         return [
             'ffmpeg',
             '-f', 'concat',
             '-safe', '0',
             '-i', options['input_list'],
-            '-c', 'copy',
+            '-c', 'copy',  # Stream copy for efficiency
             options['output_file']
         ]
-    
+
     def build_video_command(self, options):
-        """Constructs FFmpeg command with optimized H.264 encoding"""
+        """H.264 optimized video processing"""
         return [
             'ffmpeg',
             '-i', options['input_file'],
             '-c:v', 'libx264',
-            '-preset', options.get('preset', 'medium'),
+            '-preset', options.get('preset', 'medium'),  # Balanced preset
             '-crf', '23',
             '-tune', 'film',
             '-movflags', '+faststart',
@@ -1329,57 +1314,162 @@ class FFmpegWrapper:
             options['output_file']
         ]
 
-    def execute_command(self, cmd):
+    def get_video_dimensions(self, file_path):
+        """Gets the dimensions of a video file using ffprobe"""
         try:
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid
-            )
-            return self.process.communicate(timeout=self.timeout)
+            command = [
+                self.ffprobe_path,
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "json",
+                file_path
+            ]
+            
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            import json
+            data = json.loads(result.stdout)
+            return (int(data["streams"][0]["width"]), 
+                   int(data["streams"][0]["height"]))
         except Exception as e:
-            if self.process and self.process.poll() is None:
-                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-            raise
-```
+            self.logger.error(f"Error getting video dimensions: {e}")
+            return None
 
-#### Separation of Concerns
-1. FFmpegWrapper
-   - All FFmpeg command construction
-   - Process management
-   - GPU acceleration handling
-   - Error management
+class TransitionHandler:
+    """Handles video transitions and effects"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.transition_length = 2.0  # seconds
+        self.resolution = (1920, 1080)  # target resolution
+        
+    def apply_transition(self, clip1, clip2, transition_type='fade'):
+        """Applies transition between two clips"""
+        # Get dimensions for both clips
+        dim1 = self.ffmpeg.get_video_dimensions(clip1)
+        dim2 = self.ffmpeg.get_video_dimensions(clip2)
+        
+        # Scale clips to target resolution
+        scaled1 = self._scale_video(clip1, dim1)
+        scaled2 = self._scale_video(clip2, dim2)
+        
+        # Apply transition effect
+        if transition_type == 'fade':
+            return self._apply_fade_transition(scaled1, scaled2)
+        elif transition_type == 'dissolve':
+            return self._apply_dissolve_transition(scaled1, scaled2)
+        else:
+            return self._apply_cut(scaled1, scaled2)
+            
+    def _scale_video(self, clip, dimensions):
+        """Scales video to target resolution"""
+        if dimensions == self.resolution:
+            return clip
+            
+        options = {
+            'input_file': clip,
+            'output_file': f'temp_{os.path.basename(clip)}',
+            'vf': f'scale={self.resolution[0]}:{self.resolution[1]}'
+        }
+        return self.ffmpeg.build_video_command(options)
+            
+    def _apply_fade_transition(self, clip1, clip2):
+        """Creates a fade transition between clips"""
+        options = {
+            'input_file': clip1,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v]fade=t=out:st={self.transition_length}:d=1[v1];' \
+                            f'[1:v]fade=t=in:st=0:d=1[v2];' \
+                            f'[v1][v2]concat=n=2:v=1:a=0'
+        }
+        return self.ffmpeg.build_video_command(options)
 
-2. AudioProcessor
-   - Track sequence management
-   - Transition timing
-   - Metadata handling
-   - No direct FFmpeg calls
+    def _apply_dissolve_transition(self, clip1, clip2):
+        """Creates a dissolve/crossfade transition"""
+        options = {
+            'input_file': clip1,
+            'input_file2': clip2,
+            'output_file': 'transition.mp4',
+            'filter_complex': f'[0:v][1:v]xfade=transition=fade:duration={self.transition_length}'
+        }
+        return self.ffmpeg.build_video_command(options)
 
-3. VideoProcessor
-   - Clip sequence management
-   - Visual transitions
-   - Overlay handling
-   - No direct FFmpeg calls
+class TextOverlay:
+    """Handles text overlays on video"""
+    def __init__(self, ffmpeg_wrapper):
+        self.ffmpeg = ffmpeg_wrapper
+        self.font = "Arial"
+        self.font_size = 24
+        self.color = "white"
+        
+    def add_text(self, video_file, text, position="bottom", duration=None):
+        """Adds text overlay to video"""
+        # Calculate text position
+        if position == "bottom":
+            y_pos = "(h-text_h-20)"
+        elif position == "top":
+            y_pos = "20"
+        else:
+            y_pos = "(h-text_h)/2"
+            
+        # Build drawtext filter
+        drawtext = f"drawtext=text='{text}':fontfile={self.font}:" \
+                  f"fontsize={self.font_size}:fontcolor={self.color}:" \
+                  f"x=(w-text_w)/2:y={y_pos}"
+                  
+        if duration:
+            drawtext += f":enable='between(t,0,{duration})'"
+            
+        options = {
+            'input_file': video_file,
+            'output_file': f'text_{os.path.basename(video_file)}',
+            'vf': drawtext
+        }
+        return self.ffmpeg.build_video_command(options)
 
-#### Performance Optimizations
-1. Video Encoding
-   - libx264 with optimized settings
-   - CRF-based quality control
-   - Film-tuned encoding
-   - Web playback optimization
+class ProgressMonitor:
+    """Real-time FFmpeg progress tracking"""
+    def __init__(self, total_duration):
+        self.total_duration = total_duration
+        self.start_time = time.time()
+        self.current_time = 0
+        self.estimated_total = 0
+        
+    def parse_progress(self, line):
+        """Parse FFmpeg output for progress information"""
+        patterns = {
+            'time': r'time=(\d{2}:\d{2}:\d{2})',
+            'frame': r'frame=\s*(\d+)',
+            'fps': r'fps=\s*(\d+\.?\d*)',
+            'size': r'size=\s*(\d+)kB',
+            'bitrate': r'bitrate=\s*(\d+\.\d+)kbits/s'
+        }
+        
+        result = {}
+        for key, pattern in patterns.items():
+            if match := re.search(pattern, line):
+                result[key] = match.group(1)
+                
+        if 'time' in result:
+            self._calculate_eta(result['time'])
+        
+        return result
+        
+    def _calculate_eta(self, time_str):
+        """Calculate estimated time remaining"""
+        h, m, s = map(int, time_str.split(':'))
+        self.current_time = h * 3600 + m * 60 + s
+        
+        if self.current_time > 0:
+            elapsed = time.time() - self.start_time
+            self.estimated_total = (elapsed * self.total_duration) / self.current_time
+            
+        return self.estimated_total - elapsed if 'elapsed' in locals() else None
 
-2. Resource Management
-   - Chunked processing
-   - Stream copying
-   - Memory-aware operations
-
-#### Error Handling
-- Centralized in FFmpegWrapper
-- Process cleanup guaranteed
-- GPU support detection
-- Structured error reporting
+    def get_progress(self):
+        """Get current progress as percentage"""
+        if self.total_duration > 0:
+            return (self.current_time / self.total_duration) * 100
+        return 0
 
 ## Data Flow
 ### Audio Pipeline
