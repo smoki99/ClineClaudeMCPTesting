@@ -56,6 +56,12 @@ def main():
         print(f"\nSuccessfully created {output_file}")
         print(f"Total duration: {total_duration/3600:.1f} hours")
         print(f"File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB")
+        
+        # Show generated files
+        print("\nGenerated files:")
+        print(f"1. Audio: {output_file}")
+        print(f"2. Timestamps: {Path(output_file).with_suffix('.txt')}")
+        
         print("\nSelected tracks:")
         for i, file in enumerate(selected_files, 1):
             print(f"{i}. {file}")

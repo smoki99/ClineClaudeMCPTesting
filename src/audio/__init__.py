@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import json
 from pydub import AudioSegment
+from datetime import timedelta
 
 class AudioProcessor:
     def __init__(self, crossfade_duration=15000):  # in ms
@@ -38,6 +39,34 @@ class AudioProcessor:
             return True
         except Exception as e:
             print(f"Error writing songlist: {e}")
+            return False
+
+    def write_youtube_timestamps(self, selected_files, output_file):
+        """Write timestamps file for YouTube in format 'HH:MM:SS TrackName'."""
+        try:
+            current_time = 0  # in seconds
+            with open(output_file, 'w', encoding='utf-8') as f:
+                for file_path in selected_files:
+                    # Convert current time to HH:MM:SS
+                    time_str = str(timedelta(seconds=int(current_time)))
+                    if time_str.startswith('0:'):  # Remove leading 0: for times less than 1 hour
+                        time_str = time_str[2:]
+                    
+                    # Get track name without path and extension
+                    track_name = Path(file_path).stem
+                    # Remove any track numbers from the start (e.g., "01-" or "1.")
+                    track_name = '-'.join(track_name.split('-')[1:]) if '-' in track_name else track_name
+                    track_name = track_name.strip()
+                    
+                    # Write timestamp and track name
+                    f.write(f"{time_str} {track_name}\n")
+                    
+                    # Add duration of current track minus crossfade for next timestamp
+                    audio = AudioSegment.from_mp3(file_path)
+                    current_time += len(audio) / 1000 - (self.crossfade_duration / 1000)
+            return True
+        except Exception as e:
+            print(f"Error writing YouTube timestamps: {e}")
             return False
 
     def crossfade_tracks(self, tracks):
@@ -97,6 +126,11 @@ class AudioProcessor:
                 bitrate="192k",
                 tags={"album": "Generated Playlist", "artist": "AudioProcessor"}
             )
+            
+            # Generate YouTube timestamps
+            timestamps_file = str(Path(output_file).with_suffix('.txt'))
+            self.write_youtube_timestamps(input_files, timestamps_file)
+            
             return True
         except Exception as e:
             print(f"Error creating playlist: {e}")
