@@ -94,9 +94,13 @@ python setup.py install
 1. FFmpeg Wrapper
 ```python
 class FFmpegWrapper:
-    """Centralized FFmpeg operations with optimized encoding"""
-    def __init__(self, timeout=None):
-        self.process = None
+    """
+    A wrapper class for FFmpeg functionality with optimized encoding
+    and resolution handling.
+    """
+    def __init__(self, ffmpeg_path=None, ffprobe_path=None, timeout=None):
+        self.ffmpeg_path = ffmpeg_path or str(Config.FFMPEG_PATH)
+        self.ffprobe_path = ffprobe_path or str(Config.FFPROBE_PATH)
         self.timeout = timeout
         self.logger = logging.getLogger('FFmpegWrapper')
 

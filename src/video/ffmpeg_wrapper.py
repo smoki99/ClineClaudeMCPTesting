@@ -1,5 +1,6 @@
 import subprocess
 import logging
+import os
 from src.config import Config
 
 logger = logging.getLogger(__name__)
@@ -44,17 +45,17 @@ class FFmpegWrapper:
             logger.info(result.stdout)
             if result.returncode != 0:
                 logger.error(f"FFmpeg command failed with error: {result.stderr}")
-                return False
-            return True
+                return None
+            return result
         except FileNotFoundError:
             logger.error("FFmpeg executable not found. Please ensure FFmpeg is installed and the path is configured correctly.")
-            return False
+            return None
         except subprocess.TimeoutExpired as e:
             logger.error(f"FFmpeg command timed out after {self.timeout} seconds.")
             raise
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
-            return False
+            return None
 
     def encode_video(self, input_file, output_file, options=None):
         """
@@ -68,11 +69,18 @@ class FFmpegWrapper:
         Returns:
             bool: True if the encoding was successful, False otherwise.
         """
-        command = [self.ffmpeg_path, '-i', input_file, '-y']  # -y to overwrite output file
+        command = [self.ffmpeg_path]  # -y to overwrite output file
+        
+        # If input_file is a raw FFmpeg input (like "testsrc=duration=1..."), don't use -i
+        if not os.path.exists(input_file):
+            command.extend(["-f", "lavfi", "-i", input_file])
+        else:
+            command.extend(['-i', input_file])
+            
         if options:
             for key, value in options.items():
                 command.extend([f"-{key}", str(value)])
-        command.append(output_file)
+        command.extend(['-y', output_file]) # -y to overwrite output file
         return self._run_command(command)
 
     def concat_video(self, input_files, output_file, options=None):
@@ -190,3 +198,33 @@ class FFmpegWrapper:
                 command.extend([f"-{key}", str(value)])
         command.append(output_file)
         return self._run_command(command)
+
+    def get_video_dimensions(self, file_path):
+        """
+        Gets the dimensions of a video file using ffprobe.
+
+        Args:
+            file_path (str): Path to the video file.
+
+        Returns:
+            tuple: A tuple containing (width, height) of the video, or None if an error occurs.
+        """
+        try:
+            command = [
+                self.ffprobe_path,
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "json",
+                file_path
+            ]
+            
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            import json
+            data = json.loads(result.stdout)
+            width = int(data["streams"][0]["width"])
+            height = int(data["streams"][0]["height"])
+            return width, height
+        except Exception as e:
+            logger.error(f"Error getting video dimensions: {e}")
+            return None

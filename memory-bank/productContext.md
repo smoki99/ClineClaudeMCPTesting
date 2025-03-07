@@ -38,9 +38,10 @@ This document explains why this project exists, the problems it solves, and how 
 - Automated 1-hour video generation
 - Random music track selection without repetition
 - Random clip selection with no consecutive repeats
-- Smooth audio and video transitions
+- Smooth audio and video transitions, scaling videos to 1920x1080 if needed
 - Track name overlay with fade effects
 - Detailed logging for verification
+- Use libx264 encoder for faster rendering and better compatibility
 - Configurable duration for testing
 - Tracklist generation for YouTube attribution
 

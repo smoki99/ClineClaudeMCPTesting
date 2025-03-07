@@ -34,6 +34,7 @@ This document serves as the foundation for the project, defining core requiremen
 - Prevent consecutive clip repetition
 - Smooth transitions between clips
 - Text overlay for track names
+- Ensure all input videos are scaled to 1920x1080 before applying transitions
 
 ## Success Metrics
 - Successful generation of 1-hour videos
