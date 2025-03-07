@@ -9,3 +9,46 @@ The file path `D:\dev\ClineClaudeMCPTesting\test_files\clips/girls1.mp4` is inco
 
 ## Cross-Platform Compatibility
 The implementation will consider the need for cross-platform compatibility (Windows and Linux) and the potential need to handle different path separators (`\` and `/`).
+
+## FFmpeg Wrapper Class
+
+### Scope
+
+The FFmpeg wrapper class will provide the following core functionalities:
+
+*   **Encoding video:** Convert video files from one format to another.
+*   **Concatenating video clips:** Join multiple video clips into a single video.
+*   **Adding audio to video:** Add an audio track to a video file.
+*   **Applying video filters:** Apply various video filters, such as scaling, cropping, and color correction.
+*   **Extracting audio from video:** Extract the audio track from a video file.
+
+### API
+
+The FFmpeg wrapper class will expose the following methods:
+
+*   `encode_video(input_file, output_file, options)`: Encodes a video file.
+    *   `input_file`: Path to the input video file.
+    *   `output_file`: Path to the output video file.
+    *   `options`: Dictionary of encoding options (e.g., codec, bitrate, resolution).
+*   `concat_video(input_files, output_file, options)`: Concatenates multiple video clips.
+    *   `input_files`: List of paths to the input video files.
+    *   `output_file`: Path to the output video file.
+     *   `options`: Dictionary of concatenation options (e.g., transition effects).
+*   `add_audio(input_file, audio_file, output_file, options)`: Adds an audio track to a video file.
+    *   `input_file`: Path to the input video file.
+    *   `audio_file`: Path to the audio file.
+    *   `output_file`: Path to the output video file.
+    *   `options`: Dictionary of audio adding options (e.g., volume, start time).
+*   `apply_filter(input_file, output_file, filter_name, options)`: Applies a video filter to a video file.
+    *   `input_file`: Path to the input video file.
+    *   `output_file`: Path to the output video file.
+    *   `filter_name`: Name of the filter to apply (e.g., scale, crop, color balance).
+    *   `options`: Dictionary of filter options (e.g., width, height, x, y).
+*   `extract_audio(input_file, output_file, options)`: Extracts the audio track from a video file.
+    *   `input_file`: Path to the input video file.
+    *   `output_file`: Path to the output audio file.
+    *   `options`: Dictionary of extraction options (e.g., format, bitrate).
+
+The `options` parameter in each method will be a dictionary that allows the user to specify various FFmpeg options for each operation.
+
+Error Handling: The wrapper should include robust error handling, raising exceptions with informative messages when FFmpeg commands fail.
