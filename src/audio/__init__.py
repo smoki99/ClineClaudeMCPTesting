@@ -19,7 +19,19 @@ class AudioProcessor:
         total_duration = 0
 
         for file in directory.glob("*.mp3"):
+            file_path = Path(file)
             try:
+                # Check File Extension
+                if file_path.suffix.lower() != ".mp3":
+                    print(f"Skipping {file}: Invalid file extension")
+                    continue
+
+                # Check File Size
+                if file_path.stat().st_size == 0:
+                    print(f"Skipping {file}: File is empty")
+                    continue
+
+                # Check Audio Format
                 audio = AudioSegment.from_mp3(str(file))
                 duration = len(audio) / 1000  # Convert ms to seconds
                 songs[str(file)] = {
@@ -116,7 +128,7 @@ class AudioProcessor:
                 gain_during_overlay=-6  # Reduce volume during crossfade to prevent clipping
             )
             
-            # Combine everything: main part + crossfade + rest of next track
+            # Combine everything: main part + crossfade + next_track[self.crossfade_duration:]
             result = result[:fade_out_pos] + overlap + next_track[self.crossfade_duration:]
 
         return result

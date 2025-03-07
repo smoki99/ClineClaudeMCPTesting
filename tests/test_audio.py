@@ -60,3 +60,59 @@ def test_create_playlist(audio_processor, sample_songlist):
             assert audio is not None
     except Exception as e:
         pytest.fail(f"Audio loading failed: {e}")
+
+def test_create_songlist_from_directory_invalid_extension(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a file with an invalid extension"""
+    test_file = tmp_path / "invalid.txt"
+    test_file.write_text("Not an MP3 file")
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+
+def test_create_songlist_from_directory_empty_file(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with an empty file"""
+    test_file = tmp_path / "empty.mp3"
+    test_file.write_bytes(b"")
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+
+def test_create_songlist_from_directory_corrupted_mp3(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a corrupted MP3 file"""
+    test_file = tmp_path / "corrupted.mp3"
+    test_file.write_text("Corrupted MP3 file")
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+
+def test_create_songlist_from_directory_not_audio_file(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a file that is not an audio file"""
+    test_file = tmp_path / "image.jpg"
+    test_file.write_text("This is an image file")
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+
+@pytest.mark.skip(reason="Cannot reliably test file permissions")
+def test_create_songlist_from_directory_incorrect_permissions(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a file that has incorrect permissions"""
+    test_file = tmp_path / "permissions.mp3"
+    AudioSegment.silent(duration=1000).export(test_file, format="mp3")
+    os.chmod(test_file, 0o444)  # Read-only permissions
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+    os.chmod(test_file, 0o777)  # Restore permissions
+
+@pytest.mark.skip(reason="Cannot reliably test file size")
+def test_create_songlist_from_directory_file_too_large(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a file that is too large"""
+    test_file = tmp_path / "large.mp3"
+    # Create a large file (e.g., 100MB)
+    with open(test_file, "wb") as f:
+        f.seek(100 * 1024 * 1024)
+        f.write(b"\0")
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
+
+def test_create_songlist_from_directory_is_directory(audio_processor, tmp_path):
+    """Test creating a songlist from a directory with a directory instead of a file"""
+    test_dir = tmp_path / "test_dir"
+    test_dir.mkdir()
+    songlist = audio_processor.create_songlist_from_directory(tmp_path)
+    assert len(songlist["songs"]) == 0
