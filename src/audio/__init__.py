@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
 import json
-from pydub import AudioSegment
 from datetime import timedelta
+from pydub import AudioSegment
+import random
 
 class AudioProcessor:
-    def __init__(self, crossfade_duration=15000):  # in ms
+    def __init__(self, crossfade_duration=5000):  # 5 seconds in milliseconds
         self.crossfade_duration = crossfade_duration
 
     def create_songlist_from_directory(self, directory):
@@ -18,13 +19,17 @@ class AudioProcessor:
         total_duration = 0
 
         for file in directory.glob("*.mp3"):
-            audio = AudioSegment.from_mp3(str(file))
-            duration = len(audio) / 1000  # Convert ms to seconds
-            songs[str(file)] = {
-                "path": str(file),
-                "duration": duration
-            }
-            total_duration += duration
+            try:
+                audio = AudioSegment.from_mp3(str(file))
+                duration = len(audio) / 1000  # Convert ms to seconds
+                songs[str(file)] = {
+                    "path": str(file),
+                    "duration": duration
+                }
+                total_duration += duration
+            except Exception as e:
+                print(f"Error loading {file}: {e}")
+                continue
 
         return {
             "songs": songs,
@@ -41,12 +46,17 @@ class AudioProcessor:
             print(f"Error writing songlist: {e}")
             return False
 
-    def write_youtube_timestamps(self, selected_files, output_file):
+    def write_youtube_timestamps(self, files, output_file, playlist_duration=None):
         """Write timestamps file for YouTube in format 'HH:MM:SS TrackName'."""
         try:
             current_time = 0  # in seconds
             with open(output_file, 'w', encoding='utf-8') as f:
-                for file_path in selected_files:
+                # Write total duration if provided
+                if playlist_duration:
+                    duration_str = str(timedelta(seconds=int(playlist_duration)))
+                    f.write(f"Total Duration: {duration_str}\n\n")
+                
+                for file_path in files:
                     # Convert current time to HH:MM:SS
                     time_str = str(timedelta(seconds=int(current_time)))
                     if time_str.startswith('0:'):  # Remove leading 0: for times less than 1 hour
@@ -111,13 +121,48 @@ class AudioProcessor:
 
         return result
 
-    def create_playlist(self, input_files, output_file):
-        """Create a playlist from input files with crossfading."""
+    def create_playlist(self, input_files, output_file, target_duration=3600):
+        """Create a playlist from input files with crossfading, targeting specific duration."""
         try:
-            # Create crossfaded mix
-            result = self.crossfade_tracks(input_files)
+            # Filter to actual files and randomize
+            available_files = [f for f in input_files if Path(f).exists()]
+            if not available_files:
+                print("No valid input files found")
+                return False
+
+            # Select files until we reach target duration
+            total_duration = 0
+            selected_files = []
+            remaining_files = available_files.copy()
+            
+            while total_duration < target_duration and remaining_files:
+                next_file = random.choice(remaining_files)
+                remaining_files.remove(next_file)
+                
+                try:
+                    audio = AudioSegment.from_mp3(next_file)
+                    duration = len(audio) / 1000  # Convert to seconds
+                    
+                    # Add file if it doesn't exceed target duration by too much
+                    if total_duration + duration <= target_duration * 1.1:  # Allow 10% overflow
+                        selected_files.append(next_file)
+                        total_duration += duration - (self.crossfade_duration / 1000)  # Account for crossfade
+                except Exception as e:
+                    print(f"Error loading {next_file}: {e}")
+                    continue
+
+            if not selected_files:
+                print("No files selected for playlist")
+                return False
+
+            # Create the playlist with crossfades
+            result = self.crossfade_tracks(selected_files)
             if result is None:
                 return False
+
+            # Create output directory if it doesn't exist
+            output_path = Path(output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Export as MP3
             result.export(
@@ -126,10 +171,16 @@ class AudioProcessor:
                 bitrate="192k",
                 tags={"album": "Generated Playlist", "artist": "AudioProcessor"}
             )
-            
+
             # Generate YouTube timestamps
-            timestamps_file = str(Path(output_file).with_suffix('.txt'))
-            self.write_youtube_timestamps(input_files, timestamps_file)
+            timestamps_file = str(output_path.with_suffix('.txt'))
+            self.write_youtube_timestamps(selected_files, timestamps_file, total_duration)
+
+            print(f"\nPlaylist created successfully:")
+            print(f"Duration: {total_duration/60:.1f} minutes")
+            print(f"Tracks: {len(selected_files)}")
+            print(f"Audio file: {output_file}")
+            print(f"Timestamps: {timestamps_file}")
             
             return True
         except Exception as e:

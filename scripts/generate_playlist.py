@@ -1,17 +1,18 @@
 import os
 import random
+from datetime import datetime
 from pathlib import Path
 from importmonkey import add_path
 add_path("D:/dev/ClineClaudeMCPTesting")
 from src.audio import AudioProcessor
 
 def main():
-    # Initialize AudioProcessor
-    audio_processor = AudioProcessor(crossfade_duration=5000)  # 5 seconds in milliseconds
+    # Initialize AudioProcessor with 5-second crossfades
+    audio_processor = AudioProcessor(crossfade_duration=5000)
     
     # Set up directories
     music_dir = Path("music")
-    output_dir = Path("test_files") / "test_audio"
+    output_dir = Path("output") / "playlists"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     print("Creating songlist from music directory...")
@@ -34,41 +35,26 @@ def main():
         print(f"Error: Could not write songlist to {songlist_file}")
         return
 
-    # Select random files from songlist
-    target_duration = 3600  # 1 hour
-    selected_files = []
-    total_duration = 0
-    available_songs = list(songlist['songs'].values())  # Convert to list for random.choice
-    
-    print("\nSelecting random tracks from songlist...")
-    while total_duration < target_duration and available_songs:
-        next_song = random.choice(available_songs)
-        selected_files.append(next_song['path'])
-        total_duration += next_song['duration']
-        print(f"Added: {Path(next_song['path']).name} (Duration: {next_song['duration']:.1f}s)")
-        available_songs.remove(next_song)
+    # Generate unique filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = str(output_dir / f"one_hour_mix_{timestamp}.mp3")
 
-    print("\nApplying crossfades and creating playlist...")
+    # Get all file paths
+    input_files = [song['path'] for song in songlist['songs'].values()]
     
-    # Create playlist with crossfades
-    output_file = str(output_dir / "one_hour_audio.mp3")
-    if audio_processor.create_playlist(selected_files, output_file):
-        print(f"\nSuccessfully created {output_file}")
-        print(f"Total duration: {total_duration/3600:.1f} hours")
-        print(f"File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB")
-        
-        # Show generated files
-        print("\nGenerated files:")
-        print(f"1. Audio: {output_file}")
+    print("\nGenerating 1-hour playlist...")
+    if audio_processor.create_playlist(input_files, output_file):
+        print("\nDone! Check the output files:")
+        print(f"1. Audio file: {output_file}")
         print(f"2. Timestamps: {Path(output_file).with_suffix('.txt')}")
-        
-        print("\nSelected tracks:")
-        for i, file in enumerate(selected_files, 1):
-            print(f"{i}. {file}")
-        print(f"\nCrossfade duration: {audio_processor.crossfade_duration/1000:.1f} seconds")
-        print("Using pydub audio processing with volume-adjusted crossfading")
+        print("\nTimestamp file contents:")
+        try:
+            with open(Path(output_file).with_suffix('.txt'), 'r') as f:
+                print(f.read())
+        except Exception as e:
+            print(f"Error reading timestamps: {e}")
     else:
-        print("Failed to create audio file")
+        print("\nFailed to create playlist")
 
 if __name__ == "__main__":
     main()
