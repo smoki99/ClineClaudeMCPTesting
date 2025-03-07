@@ -1,0 +1,62 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+        args: ['--maxkb=500']
+    -   id: check-ast
+    -   id: check-json
+    -   id: check-merge-conflict
+    -   id: detect-private-key
+
+-   repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+    -   id: black
+        language_version: python3.10
+
+-   repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+    -   id: flake8
+        additional_dependencies: [
+            'flake8-docstrings',
+            'flake8-builtins',
+            'flake8-comprehensions',
+        ]
+
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.4.1
+    hooks:
+    -   id: mypy
+        additional_dependencies: [types-all]
+
+-   repo: https://github.com/pycqa/pylint
+    rev: v2.17.4
+    hooks:
+    -   id: pylint
+        args: [
+            '--disable=C0111',  # missing-docstring
+            '--disable=C0103',  # invalid-name
+        ]
+        additional_dependencies: [pylint-pytest]
+
+-   repo: https://github.com/asottile/pyupgrade
+    rev: v3.7.0
+    hooks:
+    -   id: pyupgrade
+        args: [--py310-plus]
+
+# Custom hooks
+-   repo: local
+    hooks:
+    -   id: check-file-size
+        name: Check media file size
+        entry: python scripts/check_file_size.py
+        language: python
+        types: [python]
+        pass_filenames: true
+        exclude: '^(clips/|music/)'  # Exclude media directories

@@ -1,26 +1,106 @@
 # YouTube Video Generator - Test Suite
 
+A sample video generator project created with AI assistance:
+- GitHub Copilot
+- Claude-3.5-sonnet (Anthropic)
+- Cline
+
 ## Overview
 This test suite validates core functionality for the YouTube video generator project, focusing on:
 - FFmpeg command validation
 - Performance metrics
 - Text overlay system
 
+## Author
+Christian Mueller (christian.mueller@vr-worlds.de)
+Project Repository: [ClineClaudeMCPTesting](https://github.com/smoki99/ClineClaudeMCPTesting)
+
 ## Prerequisites
-- Anaconda or Miniconda (for Windows development)
-- FFmpeg is provided in the project (ffmpeg-7.1-full_build-shared)
-- Windows 10/11 for development
+
+### System Requirements
+- Windows 10/11 (development platform)
+- 8GB RAM minimum (16GB recommended)
+- SSD storage recommended
+- Multi-core CPU recommended
+
+### Required Software
+1. Anaconda or Miniconda
+   - Download from: https://docs.conda.io/en/latest/miniconda.html
+   - Add to PATH during installation
+
+2. Git
+   - Download from: https://git-scm.com/download/win
+   - Required for version control
+
+3. FFmpeg (provided)
+   - Located in ffmpeg-7.1-full_build-shared/
+   - No manual installation needed
+
+### Optional Tools
+- VSCode (recommended IDE)
+- SourceTree (Git GUI client)
+- FFmpeg GUI for testing
 
 ## Setup
-1. Create and activate conda environment:
+
+### 1. Environment Setup
+
+#### Option A: Using Conda Environment File (Recommended)
 ```bash
-conda create -n videogen python=3.10
+# Create environment from file
+conda env create -f environment.yml
+
+# Activate environment
 conda activate videogen
+
+# Verify installation
+conda list
+python --version
 ```
 
-2. Install dependencies:
+#### Option B: Manual Setup
 ```bash
+# Create base environment
+conda create -n videogen python=3.10
+
+# Activate environment
+conda activate videogen
+
+# Install core dependencies
+conda install -c conda-forge ffmpeg=7.1
+conda install numpy pillow pytest jupyter
+
+# Install remaining packages
 pip install -r requirements.txt
+```
+
+### 2. Development Setup
+```bash
+# Install in development mode
+pip install -e .[dev]
+
+# Setup pre-commit hooks
+pre-commit install
+
+# Configure git
+git config --local core.autocrlf true
+
+# Run initial checks
+pre-commit run --all-files
+```
+
+### 3. Verify Installation
+```bash
+# Check FFmpeg
+ffmpeg -version
+
+# Check Python packages
+python -c "import moviepy; print(f'moviepy: {moviepy.__version__}')"
+python -c "import pydub; print(f'pydub: {pydub.__version__}')"
+python -c "import numpy; print(f'numpy: {numpy.__version__}')"
+
+# Run tests
+pytest -v
 ```
 
 3. Project Structure:
@@ -129,6 +209,57 @@ rm -rf test_files/*
 - Performance tests may take several minutes
 - Resource usage may be high during video processing
 
+## Version Control
+
+### Repository Setup
+The project uses Git for version control. Initial setup:
+
+```bash
+# Clone the repository
+git clone [repository-url]
+cd video-generator
+
+# Configure Git (if not already done)
+git config user.name "Your Name"
+git config user.email "your.email@example.com"
+```
+
+### Development Workflow
+
+1. Create feature branch:
+```bash
+git checkout -b feature/new-feature
+```
+
+2. Make changes and commit:
+```bash
+git add .
+git commit -m "Description of changes"
+```
+
+3. Push changes:
+```bash
+git push origin feature/new-feature
+```
+
+### Branch Naming Convention
+- feature/* - For new features
+- bugfix/* - For bug fixes
+- test/* - For test additions/modifications
+- docs/* - For documentation updates
+
+### Commit Message Guidelines
+- Use present tense ("Add feature" not "Added feature")
+- First line is a summary (50 chars or less)
+- Optionally followed by blank line and detailed description
+- Reference issues and pull requests when relevant
+
+### File Management
+- Media files (clips/, music/) are not tracked in Git
+- FFmpeg binaries are managed separately
+- Output and temporary files are ignored
+- Test results are not tracked
+
 ## Common Issues
 1. FFmpeg not found:
    - Ensure FFmpeg is installed and in system PATH
@@ -141,3 +272,8 @@ rm -rf test_files/*
 3. Resource constraints:
    - Tests may require significant CPU/memory
    - Adjust test durations in test_performance.py if needed
+
+4. Git-related:
+   - Large files should not be committed
+   - Use .gitignore for project-specific exclusions
+   - Keep media files in designated directories

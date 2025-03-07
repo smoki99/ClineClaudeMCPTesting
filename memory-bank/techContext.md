@@ -314,7 +314,35 @@ VIDEO_GENERATOR_ENV = {
 - Text overlay
 - Logger interface
 
+## Version Control
+### Git Configuration
+- Repository initialized with main branch
+- .gitignore set up for Python and media files
+- clips/ and music/ tracked but contents ignored
+- FFmpeg binaries managed separately
+
+### Branch Strategy
+- main: Production-ready code
+- develop: Integration branch
+- feature/*: New features
+- bugfix/*: Bug fixes
+- test/*: Test additions/modifications
+- docs/*: Documentation updates
+
+### Commit Standards
+- Present tense in messages
+- 50 char summary line
+- Reference issues when relevant
+- Include breaking changes in body
+
+### Binary Management
+- Media files not tracked
+- Use designated directories
+- Clean working directories
+- Test results ignored
+
 ## Notes
 - Keep this document in sync with package.json or equivalent
 - Update when changing development tools or processes
 - Document breaking changes in dependencies
+- Follow Git commit standards

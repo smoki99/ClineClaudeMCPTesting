@@ -1,0 +1,35 @@
+name: videogen
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  # Core dependencies from conda-forge
+  - ffmpeg=7.1
+  - numpy>=1.24.3
+  - pillow>=9.5.0
+  - pytest>=7.4.0
+  - jupyter>=1.0.0
+  # Development tools
+  - black>=23.3.0
+  - flake8>=6.0.0
+  - mypy>=1.4.1
+  - pip:
+    # Additional packages from requirements.txt
+    - moviepy==1.0.3
+    - python-ffmpeg==2.0.2
+    - pydub>=0.25.1
+    - soundfile>=0.12.1
+    - psutil>=5.9.5
+    - tqdm>=4.65.0
+    - pytest-cov>=4.1.0
+    - pytest-mock>=3.11.1
+    - pylint>=2.17.4
+    - memory-profiler>=0.61.0
+    - sphinx>=7.0.1
+    - sphinx-rtd-theme>=1.2.2
+    - pre-commit>=3.3.3
+
+variables:
+  PYTHONPATH: ${CONDA_PREFIX}/lib/python3.10/site-packages
