@@ -1,13 +1,22 @@
-import json
 import os
-import subprocess
+import random
 from pathlib import Path
-from src.video.ffmpeg_wrapper import FFmpegWrapper
+import subprocess
+import json
+
+# Get FFmpeg path from Config
+def get_ffmpeg_path():
+    config_file = Path("src/config.py")
+    ffmpeg_path = Path("ffmpeg-7.1-full_build-shared/bin/ffmpeg.exe")
+    if ffmpeg_path.exists():
+        return str(ffmpeg_path)
+    else:
+        raise FileNotFoundError("FFmpeg not found")
 
 class AudioManager:
-    def __init__(self):
+    def __init__(self, ffmpeg_path):
         """Initialize AudioManager with FFmpegWrapper instance."""
-        self.ffmpeg = FFmpegWrapper()
+        self.ffmpeg_path = ffmpeg_path
 
     def read_songlist(self, songlist_path):
         """
@@ -24,9 +33,7 @@ class AudioManager:
             FileNotFoundError: If the file doesn't exist.
         """
         with open(songlist_path, 'r') as f:
-            songlist = json.load(f)
-            self._validate_songlist(songlist)
-            return songlist
+            return json.load(f)
 
     def write_songlist(self, songlist, output_path):
         """
@@ -40,7 +47,6 @@ class AudioManager:
             bool: True if successful, False otherwise.
         """
         try:
-            self._validate_songlist(songlist)
             with open(output_path, 'w') as f:
                 json.dump(songlist, f, indent=4)
             return True
@@ -95,7 +101,7 @@ class AudioManager:
         try:
             # Get duration and other metadata using FFmpeg
             result = subprocess.run([
-                self.ffmpeg.ffmpeg_path,
+                self.ffmpeg_path,
                 "-i", file_path,
                 "-f", "null", "-"
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -155,7 +161,7 @@ class AudioManager:
 
             # Build FFmpeg command
             command = [
-                self.ffmpeg.ffmpeg_path,
+                self.ffmpeg_path,
                 "-f", "concat",  # Use concat demuxer
                 "-safe", "0",  # Allow unsafe file paths
                 "-i", concat_file,  # Input concat file
@@ -165,8 +171,8 @@ class AudioManager:
             ]
 
             # Execute command
-            result = self.ffmpeg._run_command(command)
-            return result and os.path.exists(output_file)
+            subprocess.run(command, check=True)
+            return True
 
         except Exception as e:
             print(f"Error concatenating audio: {e}")
@@ -198,30 +204,109 @@ class AudioManager:
         # Convert to string with forward slashes
         return str(p).replace(os.sep, '/')
 
-    def _validate_songlist(self, songlist):
-        """
-        Validate songlist format.
+def main():
+    ffmpeg_path = get_ffmpeg_path()
+    #audio_manager = AudioManager(ffmpeg_path)
+    
+    # Set up directories
+    music_dir = Path("music")
+    output_dir = Path("test_files") / "test_audio"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    print("Creating songlist from music directory...")
+    #try:
+    #    songlist = audio_manager.create_songlist_from_directory(music_dir)
+    #except FileNotFoundError as e:
+    #    print(f"Error: {e}")
+    #    return
+    
+    # Save the complete songlist
+    #songlist_file = output_dir / "complete_songlist.json"
+    #if audio_manager.write_songlist(songlist, songlist_file):
+    #    print(f"\nSaved complete songlist to {songlist_file}")
+    #    print(f"Total songs: {len(songlist['songs'])}")
+    #    print(f"Total duration: {songlist['total_duration'] / 3600:.2f} hours")
+    #else:
+    #    print(f"Error: Could not write songlist to {songlist_file}")
+    #    return
+
+    # Select random files from songlist
+    target_duration = 3600  # 1 hour
+    selected_files = []
+    total_duration = 0
+    
+    print("\nSelecting random tracks from music directory...")
+    
+    music_path = Path("music")
+    mp3_files = list(music_path.glob("**/*.mp3"))
+    
+    def get_duration(file_path):
+        """Get duration of an audio file using FFmpeg."""
+        result = subprocess.run([
+            ffmpeg_path,
+            "-i", str(file_path),
+            "-f", "null", "-"
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
-        Args:
-            songlist (dict): The songlist to validate.
-            
-        Raises:
-            ValueError: If the songlist is invalid.
-        """
-        if not isinstance(songlist, dict):
-            raise ValueError("Songlist must be a dictionary")
-        
-        if "songs" not in songlist:
-            raise ValueError("Songlist must contain 'songs' key")
-        
-        if not isinstance(songlist["songs"], list):
-            raise ValueError("Songs must be a list")
-        
-        for song in songlist["songs"]:
-            if not isinstance(song, dict):
-                raise ValueError("Each song must be a dictionary")
-            
-            required_keys = ["path", "duration", "title"]
-            for key in required_keys:
-                if key not in song:
-                    raise ValueError(f"Song missing required key: {key}")
+        # Extract duration from FFmpeg output
+        for line in result.stderr.splitlines():
+            if "Duration" in line:
+                time_str = line.split("Duration: ")[1].split(",")[0]
+                h, m, s = map(float, time_str.split(":"))
+                return float(h) * 3600 + float(m) * 60 + float(s)
+        return 0
+    
+    while total_duration < target_duration and mp3_files:
+        next_file = random.choice(mp3_files)
+        duration = get_duration(next_file)
+        if duration > 0:
+            selected_files.append(str(next_file))
+            total_duration += duration
+            print(f"Added: {Path(next_file).name} (Duration: {duration:.1f}s)")
+        mp3_files.remove(next_file)
+
+    def concat_audio(input_files, output_file):
+        """Concatenate audio files using FFmpeg."""
+        # Create a temporary concat file
+        concat_file = "concat.txt"
+        try:
+            # Create concat file with absolute paths
+            with open(concat_file, "w", encoding='utf-8') as f:
+                for file in input_files:
+                    abs_path = Path(file).resolve()
+                    f.write(f"file '{str(abs_path)}'\n")
+
+            # Run FFmpeg concat command
+            subprocess.run([
+                ffmpeg_path,
+                "-f", "concat",  # Use concat demuxer
+                "-safe", "0",  # Allow unsafe file paths
+                "-i", concat_file,  # Input concat file
+                "-acodec", "copy",  # Copy audio codec
+                "-y",  # Overwrite output
+                output_file  # Output file
+            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            return True
+        except Exception as e:
+            print(f"Error concatenating audio: {e}")
+            return False
+        finally:
+            if os.path.exists(concat_file):
+                os.remove(concat_file)
+
+    # Concatenate the selected audio files
+    print("\nConcatenating audio files...")
+    output_file = str(output_dir / "one_hour_audio.mp3")
+    if concat_audio(selected_files, output_file):
+        print(f"\nSuccessfully created {output_file}")
+        print(f"Total duration: {total_duration/3600:.1f} hours")
+        print(f"File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB")
+        print("\nSelected tracks:")
+        for i, file in enumerate(selected_files, 1):
+            print(f"{i}. {file}")
+    else:
+        print("Failed to concatenate audio files")
+
+if __name__ == "__main__":
+    main()

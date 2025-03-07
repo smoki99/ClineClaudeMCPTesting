@@ -1,53 +1,105 @@
-## Problem
-The file path `D:\dev\ClineClaudeMCPTesting\test_files\clips/girls1.mp4` is incorrect and should be `D:\dev\ClineClaudeMCPTesting\clips\girls1.mp4`. The project needs to be cross-platform compatible (Windows and Linux), so path separator differences (`\` and `/`) need to be handled.
+## Audio Management Implementation
 
-## Plan
-1.  **Identify where the incorrect file path is being used.** Use the `search_files` tool to search for the specific file path `D:\dev\ClineClaudeMCPTesting\test_files\clips/girls1.mp4` within the project.
-2.  **Analyze the context of where the incorrect file path is being used.** Use the `read_file` tool to examine the contents of the files where the incorrect path is present to understand how the path is being used.
-3.  **Implement a helper function (if necessary) to handle path separator differences.** If the file path is being constructed dynamically, create a helper function that can convert between Windows and Linux path separators. This function will ensure that the correct path separator is used based on the operating system.
-4.  **Correct the file path.** Use the `replace_in_file` tool to replace the incorrect path with the correct path `D:\dev\ClineClaudeMCPTesting\clips\girls1.mp4`. If a helper function is implemented, use it to ensure the correct path separator is used.
+### Current Status
+- Basic AudioManager class implemented
+- Successfully tested audio concatenation with random files
+- Working path normalization and file handling
+- Basic test coverage in place
 
-## Cross-Platform Compatibility
-The implementation will consider the need for cross-platform compatibility (Windows and Linux) and the potential need to handle different path separators (`\` and `/`).
+### Next Implementation Phase: Project Integration
 
-## FFmpeg Wrapper Class
+1. **Songlist Management Enhancement**
+   ```python
+   {
+       "songs": [
+           {
+               "path": "music/song1.mp3",
+               "duration": 240,
+               "title": "Song Title",
+               "artist": "Artist Name"
+           }
+       ],
+       "total_duration": 0
+   }
+   ```
 
-### Scope
+2. **Implementation Steps**
+   a) Songlist Creation:
+      - Scan music directory recursively
+      - Calculate accurate durations using FFmpeg
+      - Extract metadata (title, artist) from files
+      - Generate and validate songlist JSON
 
-The FFmpeg wrapper class will provide the following core functionalities:
+   b) AudioManager Integration:
+      - Replace direct FFmpeg calls with AudioManager methods
+      - Implement proper error handling
+      - Add validation for audio formats
+      - Create consistent directory structure
 
-*   **Encoding video:** Convert video files from one format to another.
-*   **Concatenating video clips:** Join multiple video clips into a single video.
-*   **Adding audio to video:** Add an audio track to a video file.
-*   **Applying video filters:** Apply various video filters, such as scaling, cropping, and color correction.
+   c) Testing Strategy:
+      - Unit tests for new functionality
+      - Integration tests for full workflow
+      - Performance testing for large playlists
+      - Error handling verification
 
-### API
+3. **Required Changes**
+   - Add metadata extraction to AudioManager
+   - Implement duration calculation methods
+   - Create songlist validation
+   - Add progress tracking for long operations
 
-The FFmpeg wrapper class will expose the following methods:
+4. **Directory Structure**
+```
+project/
+├── music/               # Source music files
+├── test_files/         # Generated test files
+│   └── test_audio/    # Output directory for tests
+├── src/
+│   ├── audio/         # Audio processing modules
+│   └── utils/         # Utility functions
+└── tests/             # Test files
+```
 
-*   `encode_video(input_file, output_file, options)`: Encodes a video file.
-    *   `input_file`: Path to the input video file.
-    *   `output_file`: Path to the output video file.
-    *   `options`: Dictionary of encoding options (e.g., codec, bitrate, resolution).
-*   `concat_video(input_files, output_file, options)`: Concatenates multiple video clips.
-    *   `input_files`: List of paths to the input video files.
-    *   `output_file`: Path to the output video file.
-     *   `options`: Dictionary of concatenation options (e.g., transition effects).
-*   `add_audio(input_file, audio_file, output_file, options)`: Adds an audio track to a video file.
-    *   `input_file`: Path to the input video file.
-    *   `audio_file`: Path to the audio file.
-    *   `output_file`: Path to the output video file.
-    *   `options`: Dictionary of audio adding options (e.g., volume, start time).
-*   `apply_filter(input_file, output_file, filter_name, options)`: Applies a video filter to a video file.
-    *   `input_file`: Path to the input video file.
-    *   `output_file`: Path to the output video file.
-    *   `filter_name`: Name of the filter to apply (e.g., scale, crop, color balance).
-    *   `options`: Dictionary of filter options (e.g., width, height, x, y).
+5. **Success Criteria**
+   - Accurate song duration calculation
+   - Correct metadata extraction
+   - Valid songlist JSON generation
+   - Successful audio concatenation
+   - Proper error handling
+   - Comprehensive test coverage
 
-The `options` parameter in each method will be a dictionary that allows the user to specify various FFmpeg options for each operation.
+### Current Tasks
+1. Modify AudioManager to handle metadata
+2. Implement songlist creation from directory
+3. Add validation for audio files
+4. Create integration tests
+5. Document all new functionality
 
-Error Handling: The wrapper should include robust error handling, raising exceptions with informative messages when FFmpeg commands fail.
+### Testing Strategy
+1. Create test cases for:
+   - Songlist generation
+   - Metadata extraction
+   - Audio validation
+   - Error conditions
+   - Full workflow integration
 
-### Timeout Handling
+2. Test with various scenarios:
+   - Different audio formats
+   - Invalid files
+   - Large playlists
+   - Missing metadata
+   - Corrupt files
 
-The `FFmpegWrapper` class must include timeout checks to prevent long-running processes from looping indefinitely. The timeout value should be configurable via a parameter in the `__init__` method. The `_run_command` method should use the timeout value when running the FFmpeg process and raise a `TimeoutExpired` exception if the process exceeds the specified timeout.
+3. Performance considerations:
+   - Memory usage for large playlists
+   - Processing time optimization
+   - Progress reporting for long operations
+
+### Future Enhancements
+1. Support for additional audio formats
+2. Advanced metadata handling
+3. Playlist organization features
+4. Audio quality control
+5. Performance optimizations
+
+Ready to proceed with implementation. Next step is to create the enhanced version of the script using AudioManager class.
